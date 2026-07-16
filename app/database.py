@@ -1,8 +1,7 @@
 import os
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, declarative_base
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./jobs.db")
 
@@ -21,14 +20,12 @@ Base = declarative_base()
 
 @event.listens_for(Engine, "connect")
 def set_sqlite_pragma(dbapi_connection, connection_record):
-    # Only execute on sqlite connection
     if DATABASE_URL.startswith("sqlite"):
         cursor = dbapi_connection.cursor()
         try:
             cursor.execute("PRAGMA journal_mode=WAL;")
             cursor.execute("PRAGMA synchronous=NORMAL;")
         except Exception:
-            # Fallback if WAL is not supported on the host filesystem (e.g. some Docker bind mounts)
             pass
         finally:
             cursor.close()

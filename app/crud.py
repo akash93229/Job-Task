@@ -1,15 +1,15 @@
-import json
 from datetime import datetime
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from app import models, schemas
 
+
 class DuplicateJobError(Exception):
     pass
 
+
 def create_job(db: Session, job_in: schemas.JobCreate) -> models.Job:
-    # Check if a duplicate job already exists in SCHEDULED state
-    # We query for same name and run_at, then compare payloads in Python
+    # Reject duplicate: same name, run_at, payload already SCHEDULED
     existing_jobs = db.query(models.Job).filter(
         models.Job.name == job_in.name,
         models.Job.run_at == job_in.run_at,
@@ -37,20 +37,23 @@ def create_job(db: Session, job_in: schemas.JobCreate) -> models.Job:
     db.refresh(db_job)
     return db_job
 
+
 def get_job(db: Session, job_id: str) -> Optional[models.Job]:
     return db.query(models.Job).filter(models.Job.id == job_id).first()
+
 
 def list_jobs(
     db: Session,
     status: Optional[str] = None,
     schedule_type: Optional[str] = None,
-    sort_by_run_at: Optional[str] = "asc",  # "asc" or "desc"
+    sort_by_run_at: Optional[str] = "asc",
     run_at_after: Optional[datetime] = None,
     run_at_before: Optional[datetime] = None,
     limit: int = 100,
     offset: int = 0
 ) -> List[models.Job]:
     query = db.query(models.Job)
+
     if status:
         query = query.filter(models.Job.status == status)
     if schedule_type:

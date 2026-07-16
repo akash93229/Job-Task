@@ -1,18 +1,19 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
 
 class JobExecutionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     job_id: str
     attempt_number: int
     started_at: datetime
     finished_at: Optional[datetime] = None
-    status: str
+    status: str  # "SUCCESS" or "FAILED"
     error_message: Optional[str] = None
 
-    class Config:
-        from_attributes = True
 
 class JobBase(BaseModel):
     name: str = Field(..., min_length=1)
@@ -22,11 +23,11 @@ class JobBase(BaseModel):
     interval_seconds: Optional[int] = Field(default=None)
     max_retries: int = Field(default=3, ge=0)
 
+
 class JobCreate(JobBase):
     @model_validator(mode="after")
     def validate_job_fields(self) -> "JobCreate":
-        # Check if run_at is in the future
-        # Compare with naive datetime or timezone-aware
+        # Reject run_at in the past
         now = datetime.now(self.run_at.tzinfo) if self.run_at.tzinfo else datetime.utcnow()
         if self.run_at <= now:
             raise ValueError("run_at must be a future datetime")
@@ -41,7 +42,10 @@ class JobCreate(JobBase):
 
         return self
 
+
 class JobResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     name: str
     payload: Dict[str, Any]
@@ -52,14 +56,9 @@ class JobResponse(BaseModel):
     status: str
     created_at: datetime
 
-    class Config:
-        from_attributes = True
 
 class JobDetailResponse(JobResponse):
     last_execution: Optional[JobExecutionResponse] = None
     next_run_at: Optional[datetime] = None
     attempt_count: int = 0
     executions: List[JobExecutionResponse] = []
-
-    class Config:
-        from_attributes = True
