@@ -64,7 +64,8 @@ def recover_stuck_jobs(db):
 
 def execute_job(db, job):
     """
-    Execute a claimed job. Creates a JobExecution record with status SUCCESS or FAILED.
+    Execute a claimed job. Creates a JobExecution record BEFORE work starts (crash durability),
+    then updates it to SUCCESS or FAILED after completion.
     Handles retry scheduling with exponential backoff and permanent failure after max_retries.
     """
     # Determine attempt number from existing execution records
@@ -76,7 +77,21 @@ def execute_job(db, job):
 
     print(f"[{job.id}] Attempt #{attempt_number} starting...")
 
-    started_at = datetime.utcnow()
+    # Write execution record BEFORE doing any work — this is what makes crash recovery
+    # possible. If the worker dies mid-sleep, recover_stuck_jobs() will find this record,
+    # check started_at elapsed time, and reset the job back to SCHEDULED.
+    execution = models.JobExecution(
+        id=str(uuid.uuid4()),
+        job_id=job.id,
+        attempt_number=attempt_number,
+        started_at=datetime.utcnow(),
+        finished_at=None,
+        status="FAILED",          # default pessimistic — updated to SUCCESS on completion
+        error_message="Worker crash or incomplete execution"
+    )
+    db.add(execution)
+    db.commit()
+    db.refresh(execution)
 
     # Simulate execution: sleep 1-3 seconds (spec requirement)
     simulated_duration = random.uniform(1.0, 3.0)
@@ -85,17 +100,12 @@ def execute_job(db, job):
     # Simulate success/failure: 70% success, 30% failure (spec requirement)
     success = random.random() < 0.70
 
-    # Build the execution record — status is always SUCCESS or FAILED (never RUNNING)
-    execution = models.JobExecution(
-        id=str(uuid.uuid4()),
-        job_id=job.id,
-        attempt_number=attempt_number,
-        started_at=started_at,
-        finished_at=datetime.utcnow(),
-        status="SUCCESS" if success else "FAILED",
-        error_message=None if success else "Simulated random execution failure (30% probability)"
+    # Update the execution record with final result
+    execution.finished_at = datetime.utcnow()
+    execution.status = "SUCCESS" if success else "FAILED"
+    execution.error_message = (
+        None if success else "Simulated random execution failure (30% probability)"
     )
-    db.add(execution)
 
     try:
         if success:
