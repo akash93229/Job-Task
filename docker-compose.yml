@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    container_name: job_scheduler_api
+    ports:
+      - "8000:8000"
+    volumes:
+      - sqlite_data:/app/data
+    environment:
+      - DATABASE_URL=sqlite:////app/data/jobs.db
+
+  worker:
+    build: .
+    command: python app/worker.py
+    volumes:
+      - sqlite_data:/app/data
+    environment:
+      - DATABASE_URL=sqlite:////app/data/jobs.db
+      - POLL_INTERVAL=2
+    depends_on:
+      - api
+
+volumes:
+  sqlite_data:
